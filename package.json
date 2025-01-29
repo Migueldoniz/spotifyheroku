@@ -1,0 +1,12 @@
+{
+    "name": "spotify-playlist-converter",
+    "version": "1.0.0",
+    "scripts": {
+      "start": "node api/app.js"
+    },
+    "dependencies": {
+      "express": "^4.18.2",
+      "spotify-web-api-node": "^5.0.2",
+      "dotenv": "^16.0.3"
+    }
+  }
