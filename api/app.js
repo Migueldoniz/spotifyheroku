@@ -19,6 +19,20 @@ const spotifyApi = new SpotifyWebApi({
   redirectUri: process.env.REDIRECT_URI,
 });
 
+// Função para renovar o token de acesso
+async function refreshAccessToken(refreshToken) {
+  try {
+    spotifyApi.setRefreshToken(refreshToken);
+    const data = await spotifyApi.refreshAccessToken();
+    const { access_token } = data.body;
+    spotifyApi.setAccessToken(access_token);
+    return access_token;
+  } catch (error) {
+    console.error('Erro ao renovar o token de acesso:', error);
+    throw error;
+  }
+}
+
 // Rota para redirecionar ao Spotify para login
 app.get('/api/login', (req, res) => {
   const scopes = [
@@ -37,10 +51,7 @@ app.get('/api/callback', async (req, res) => {
     const data = await spotifyApi.authorizationCodeGrant(code);
     const { access_token, refresh_token } = data.body;
 
-    // Salvar o refresh token (aqui seria ideal salvar no banco de dados)
-    spotifyApi.setAccessToken(access_token);
-    spotifyApi.setRefreshToken(refresh_token);
-
+    // Redireciona para a tela principal com o token de acesso e refresh token
     res.redirect(`/?access_token=${access_token}&refresh_token=${refresh_token}`);
   } catch (error) {
     console.error('Erro durante a autenticação:', error);
@@ -51,6 +62,7 @@ app.get('/api/callback', async (req, res) => {
 // Rota para obter todas as músicas curtidas
 app.get('/api/liked-tracks', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
+  const refreshToken = req.headers['x-refresh-token']; // Recebe o refresh token no cabeçalho
 
   if (!token) {
     return res.status(401).send('Token de acesso não fornecido.');
@@ -79,14 +91,40 @@ app.get('/api/liked-tracks', async (req, res) => {
 
     res.json(allTracks);
   } catch (error) {
-    console.error('Erro ao obter músicas curtidas:', error);
-    res.status(500).json({ success: false, message: 'Erro ao obter músicas curtidas', error });
+    if (error.statusCode === 401 || error.statusCode === 403) {
+      // Token expirado, tenta renovar
+      try {
+        const newAccessToken = await refreshAccessToken(refreshToken);
+        spotifyApi.setAccessToken(newAccessToken);
+
+        // Tenta novamente obter as músicas curtidas
+        const likedTracks = await spotifyApi.getMySavedTracks({ limit: 50 });
+        const tracks = likedTracks.body.items.map(item => ({
+          name: item.track.name,
+          artist: item.track.artists.map(artist => artist.name).join(', '),
+          uri: item.track.uri
+        }));
+
+        res.json(tracks);
+      } catch (refreshError) {
+        console.error('Erro ao renovar o token de acesso:', refreshError);
+        res.status(500).json({ success: false, message: 'Erro ao renovar o token de acesso', error: refreshError });
+      }
+    } else if (error.statusCode === 429) {
+      // Limite de requisições excedido
+      const retryAfter = error.headers['retry-after'] || 5; // Tempo de espera em segundos
+      res.status(429).json({ success: false, message: `Limite de requisições excedido. Tente novamente em ${retryAfter} segundos.` });
+    } else {
+      console.error('Erro ao obter músicas curtidas:', error);
+      res.status(500).json({ success: false, message: 'Erro ao obter músicas curtidas', error });
+    }
   }
 });
 
 // Rota para criar playlist
 app.post('/api/create-playlist', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
+  const refreshToken = req.headers['x-refresh-token']; // Recebe o refresh token no cabeçalho
 
   if (!token) {
     return res.status(401).json({ success: false, message: 'Token de acesso não fornecido.' });
@@ -121,8 +159,39 @@ app.post('/api/create-playlist', async (req, res) => {
 
     res.json({ success: true, playlistUrl: playlist.body.external_urls.spotify });
   } catch (error) {
-    console.error('Erro ao criar a playlist:', error);
-    res.status(500).json({ success: false, message: 'Erro ao criar a playlist', error });
+    if (error.statusCode === 401 || error.statusCode === 403) {
+      // Token expirado, tenta renovar
+      try {
+        const newAccessToken = await refreshAccessToken(refreshToken);
+        spotifyApi.setAccessToken(newAccessToken);
+
+        // Tenta novamente criar a playlist
+        const me = await spotifyApi.getMe();
+        const userId = me.body.id;
+
+        const playlist = await spotifyApi.createPlaylist(name || 'Minhas Curtidas como Playlist', {
+          description: 'Playlist criada a partir das músicas curtidas.',
+          public: false,
+        });
+
+        const playlistId = playlist.body.id;
+
+        // Adicionar músicas em lotes de 100
+        const batchSize = 100;
+        for (let i = 0; i < trackUris.length; i += batchSize) {
+          const batch = trackUris.slice(i, i + batchSize);
+          await spotifyApi.addTracksToPlaylist(playlistId, batch);
+        }
+
+        res.json({ success: true, playlistUrl: playlist.body.external_urls.spotify });
+      } catch (refreshError) {
+        console.error('Erro ao renovar o token de acesso:', refreshError);
+        res.status(500).json({ success: false, message: 'Erro ao renovar o token de acesso', error: refreshError });
+      }
+    } else {
+      console.error('Erro ao criar a playlist:', error);
+      res.status(500).json({ success: false, message: 'Erro ao criar a playlist', error });
+    }
   }
 });
 
