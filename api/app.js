@@ -3,7 +3,7 @@ const SpotifyWebApi = require('spotify-web-api-node');
 require('dotenv').config();
 
 const app = express();
-
+app.use(express.static('public'));
 // Configuração do Spotify API
 const spotifyApi = new SpotifyWebApi({
   clientId: process.env.CLIENT_ID,
@@ -12,14 +12,14 @@ const spotifyApi = new SpotifyWebApi({
 });
 
 // Rota para redirecionar ao Spotify para login
-app.get('/login', (req, res) => {
+app.get('/api/login', (req, res) => {
   const scopes = ['user-library-read', 'playlist-modify-public'];
   const authorizeURL = spotifyApi.createAuthorizeURL(scopes);
   res.redirect(authorizeURL);
 });
 
 // Rota de callback após autorização
-app.get('/callback', async (req, res) => {
+app.get('/api/callback', async (req, res) => {
   const { code } = req.query;
 
   try {
@@ -36,7 +36,7 @@ app.get('/callback', async (req, res) => {
 });
 
 // Rota para criar a playlist
-app.get('/create-playlist', async (req, res) => {
+app.get('/api/create-playlist', async (req, res) => {
   try {
     const likedTracks = await spotifyApi.getMySavedTracks({ limit: 50 });
     const trackUris = likedTracks.body.items.map((item) => item.track.uri);
@@ -56,6 +56,12 @@ app.get('/create-playlist', async (req, res) => {
   } catch (error) {
     res.status(500).send(`Erro ao criar a playlist: ${error.message}`);
   }
+});
+
+// Iniciar o servidor
+const PORT = process.env.PORT || 8888;
+app.listen(PORT, () => {
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
 });
 
 module.exports = app;
