@@ -4,11 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spotify Playlist Converter</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Transforme suas músicas curtidas em uma playlist!</h1>
-    <a href="/api/login">
-        <button>Conectar ao Spotify</button>
-    </a>
+    <div id="loginScreen" class="container">
+        <h1>Spotify Playlist Converter</h1>
+        <button id="loginButton">Conectar ao Spotify</button>
+    </div>
+
+    <div id="mainScreen" class="container" style="display: none;">
+        <h2>Suas Músicas Curtidas</h2>
+        <ul id="trackList"></ul>
+        
+        <h2>Criar Playlist</h2>
+        <input type="text" id="playlistName" placeholder="Nome da Playlist" />
+        <button id="createPlaylistButton">Criar Playlist</button>
+        <p id="status"></p>
+    </div>
+
+    <script src="script.js"></script>
 </body>
 </html>
