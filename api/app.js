@@ -4,6 +4,13 @@ require('dotenv').config();
 
 const app = express();
 app.use(express.static('public'));
+
+// Verifique se as variáveis de ambiente estão definidas
+if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET || !process.env.REDIRECT_URI) {
+  console.error('Erro: Variáveis de ambiente não definidas.');
+  process.exit(1);
+}
+
 // Configuração do Spotify API
 const spotifyApi = new SpotifyWebApi({
   clientId: process.env.CLIENT_ID,
@@ -31,6 +38,7 @@ app.get('/api/callback', async (req, res) => {
 
     res.send('Autenticação bem-sucedida! Você pode fechar esta aba.');
   } catch (error) {
+    console.error('Erro durante a autenticação:', error);
     res.status(500).send(`Erro durante a autenticação: ${error.message}`);
   }
 });
@@ -54,6 +62,7 @@ app.get('/api/create-playlist', async (req, res) => {
 
     res.send('Playlist criada com sucesso!');
   } catch (error) {
+    console.error('Erro ao criar a playlist:', error);
     res.status(500).send(`Erro ao criar a playlist: ${error.message}`);
   }
 });
