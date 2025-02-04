@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,14 +13,20 @@
     </div>
 
     <div id="mainScreen" class="container" style="display: none;">
-        <h2>Suas Músicas Curtidas</h2>
-        <ul id="trackList"></ul>
-        
-        <h2>Criar Playlist</h2>
-        <input type="text" id="playlistName" placeholder="Nome da Playlist" />
-        <button id="createPlaylistButton">Criar Playlist</button>
-        <p id="status"></p>
-    </div>
+    <h2>Suas Músicas Curtidas</h2>
+    <select id="genreDropdown">
+        <option value="">Selecione um gênero</option>
+    </select>
+    <button id="filterButton">Filtrar</button>
+    <button id="selectAllButton">Selecionar Tudo</button> <!-- Novo botão -->
+    <ul id="trackList"></ul>
+
+    <h2>Criar Playlist</h2>
+    <input type="text" id="playlistName" placeholder="Nome da Playlist" />
+    <button id="createPlaylistButton">Criar Playlist</button>
+    <p id="status"></p>
+    <p id="status"></p>
+</div>
 
     <script src="script.js"></script>
 </body>

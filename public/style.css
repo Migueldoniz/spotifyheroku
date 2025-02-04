@@ -44,7 +44,7 @@ button:disabled {
     padding: 5px 0;
 }
 
-input {
+#genreDropdown, input {
     padding: 10px;
     margin: 10px 0;
     border: none;

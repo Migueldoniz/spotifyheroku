@@ -4,22 +4,19 @@ require('dotenv').config();
 
 const app = express();
 app.use(express.static('public'));
-app.use(express.json()); // Middleware para permitir JSON no corpo das requisições
+app.use(express.json());
 
-// Verifique se as variáveis de ambiente estão definidas
 if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET || !process.env.REDIRECT_URI) {
   console.error('Erro: Variáveis de ambiente não definidas.');
   process.exit(1);
 }
 
-// Configuração do Spotify API
 const spotifyApi = new SpotifyWebApi({
   clientId: process.env.CLIENT_ID,
   clientSecret: process.env.CLIENT_SECRET,
   redirectUri: process.env.REDIRECT_URI,
 });
 
-// Função para renovar o token de acesso
 async function refreshAccessToken(refreshToken) {
   try {
     spotifyApi.setRefreshToken(refreshToken);
@@ -33,7 +30,6 @@ async function refreshAccessToken(refreshToken) {
   }
 }
 
-// Rota para redirecionar ao Spotify para login
 app.get('/api/login', (req, res) => {
   const scopes = [
     'user-library-read',
@@ -44,25 +40,21 @@ app.get('/api/login', (req, res) => {
   res.redirect(authorizeURL);
 });
 
-// Rota de callback após autorização
 app.get('/api/callback', async (req, res) => {
   const { code } = req.query;
   try {
     const data = await spotifyApi.authorizationCodeGrant(code);
     const { access_token, refresh_token } = data.body;
-
-    // Redireciona para a tela principal com o token de acesso e refresh token
     res.redirect(`/?access_token=${access_token}&refresh_token=${refresh_token}`);
   } catch (error) {
     console.error('Erro durante a autenticação:', error);
-    res.status(500).send(`Erro durante a autenticação: ${error.message}`);
+    res.status(500).send('Erro durante a autenticação.');
   }
 });
 
-// Rota para obter todas as músicas curtidas
 app.get('/api/liked-tracks', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
-  const refreshToken = req.headers['x-refresh-token']; // Recebe o refresh token no cabeçalho
+  const refreshToken = req.headers['x-refresh-token'];
 
   if (!token) {
     return res.status(401).send('Token de acesso não fornecido.');
@@ -72,130 +64,145 @@ app.get('/api/liked-tracks', async (req, res) => {
     spotifyApi.setAccessToken(token);
 
     let allTracks = [];
-    let limit = 50;
     let offset = 0;
+    const limit = 50;
     let total = null;
 
     do {
       const likedTracks = await spotifyApi.getMySavedTracks({ limit, offset });
+      
+      // Pega os IDs dos artistas para obter gêneros
+      const artistIds = likedTracks.body.items
+        .map(item => item.track.artists[0]?.id)
+        .filter(id => id);
 
-      allTracks.push(...likedTracks.body.items.map(item => ({
+      const artistsInfo = await spotifyApi.getArtists(artistIds);
+      const artistGenres = artistsInfo.body.artists.reduce((acc, artist) => {
+        acc[artist.id] = artist.genres;
+        return acc;
+      }, {});
+
+      const tracks = likedTracks.body.items.map(item => ({
         name: item.track.name,
         artist: item.track.artists.map(artist => artist.name).join(', '),
-        uri: item.track.uri
-      })));
+        uri: item.track.uri,
+        genre: artistGenres[item.track.artists[0]?.id] || []
+      }));
 
+      allTracks.push(...tracks);
       total = likedTracks.body.total;
       offset += limit;
     } while (offset < total);
 
     res.json(allTracks);
   } catch (error) {
-    if (error.statusCode === 401 || error.statusCode === 403) {
-      // Token expirado, tenta renovar
-      try {
-        const newAccessToken = await refreshAccessToken(refreshToken);
-        spotifyApi.setAccessToken(newAccessToken);
-
-        // Tenta novamente obter as músicas curtidas
-        const likedTracks = await spotifyApi.getMySavedTracks({ limit: 50 });
-        const tracks = likedTracks.body.items.map(item => ({
-          name: item.track.name,
-          artist: item.track.artists.map(artist => artist.name).join(', '),
-          uri: item.track.uri
-        }));
-
-        res.json(tracks);
-      } catch (refreshError) {
-        console.error('Erro ao renovar o token de acesso:', refreshError);
-        res.status(500).json({ success: false, message: 'Erro ao renovar o token de acesso', error: refreshError });
-      }
-    } else if (error.statusCode === 429) {
-      // Limite de requisições excedido
-      const retryAfter = error.headers['retry-after'] || 5; // Tempo de espera em segundos
-      res.status(429).json({ success: false, message: `Limite de requisições excedido. Tente novamente em ${retryAfter} segundos.` });
-    } else {
-      console.error('Erro ao obter músicas curtidas:', error);
-      res.status(500).json({ success: false, message: 'Erro ao obter músicas curtidas', error });
-    }
+    console.error('Erro ao obter músicas curtidas:', error);
+    res.status(500).json({ message: 'Erro ao obter músicas curtidas', error });
   }
 });
 
-// Rota para criar playlist
-app.post('/api/create-playlist', async (req, res) => {
+app.get('/api/liked-tracks-by-genre', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
-  const refreshToken = req.headers['x-refresh-token']; // Recebe o refresh token no cabeçalho
+  const refreshToken = req.headers['x-refresh-token'];
+  const genre = req.query.genre; // Gênero a ser filtrado
 
   if (!token) {
-    return res.status(401).json({ success: false, message: 'Token de acesso não fornecido.' });
+    return res.status(401).send('Token de acesso não fornecido.');
   }
 
-  const { name, trackUris } = req.body;
-
-  if (!trackUris || trackUris.length === 0) {
-    return res.status(400).json({ success: false, message: 'Nenhuma música foi selecionada.' });
+  if (!genre) {
+    return res.status(400).send('Gênero não especificado.');
   }
 
   try {
     spotifyApi.setAccessToken(token);
 
-    const me = await spotifyApi.getMe();
-    const userId = me.body.id;
+    let allTracks = [];
+    let offset = 0;
+    const limit = 50;
+    let total = null;
 
-    // Criar a playlist
-    const playlist = await spotifyApi.createPlaylist(name || 'Minhas Curtidas como Playlist', {
-      description: 'Playlist criada a partir das músicas curtidas.',
-      public: false,
-    });
+    do {
+      const likedTracks = await spotifyApi.getMySavedTracks({ limit, offset });
 
-    const playlistId = playlist.body.id;
+      // Obter os IDs dos artistas de cada música
+      const artistIds = likedTracks.body.items
+        .map(item => item.track.artists[0].id) // Pega o primeiro artista de cada música
+        .filter((id, index, self) => self.indexOf(id) === index); // Remove duplicatas
 
-    // Adicionar músicas em lotes de 100
-    const batchSize = 100;
-    for (let i = 0; i < trackUris.length; i += batchSize) {
-      const batch = trackUris.slice(i, i + batchSize);
-      await spotifyApi.addTracksToPlaylist(playlistId, batch);
-    }
+      // Obter os gêneros dos artistas
+      const artistsInfo = await spotifyApi.getArtists(artistIds);
+      const artistGenres = artistsInfo.body.artists.reduce((acc, artist) => {
+        acc[artist.id] = artist.genres;
+        return acc;
+      }, {});
 
-    res.json({ success: true, playlistUrl: playlist.body.external_urls.spotify });
+      // Filtrar as músicas pelo gênero do artista
+      const tracks = likedTracks.body.items
+        .filter(item => {
+          const artistId = item.track.artists[0].id;
+          return artistGenres[artistId]?.some(g => g.toLowerCase().includes(genre.toLowerCase()));
+        })
+        .map(item => ({
+          name: item.track.name,
+          artist: item.track.artists.map(artist => artist.name).join(', '),
+          uri: item.track.uri,
+        }));
+
+      allTracks.push(...tracks);
+      total = likedTracks.body.total;
+      offset += limit;
+    } while (offset < total);
+
+    res.json(allTracks);
   } catch (error) {
-    if (error.statusCode === 401 || error.statusCode === 403) {
-      // Token expirado, tenta renovar
+    if (error.statusCode === 401) {
       try {
         const newAccessToken = await refreshAccessToken(refreshToken);
         spotifyApi.setAccessToken(newAccessToken);
+        return res.redirect('/api/liked-tracks-by-genre');
+      } catch (refreshError) {
+        return res.status(500).json({ message: 'Erro ao renovar o token', error: refreshError });
+      }
+    }
+    console.error('Erro ao obter músicas curtidas por gênero:', error);
+    res.status(500).json({ message: 'Erro ao obter músicas curtidas por gênero', error });
+  }
+});
+app.post('/api/create-playlist', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  const refreshToken = req.headers['x-refresh-token'];
+  const { playlistName, trackUris } = req.body;
 
-        // Tenta novamente criar a playlist
-        const me = await spotifyApi.getMe();
-        const userId = me.body.id;
+  if (!token) {
+      return res.status(401).json({ message: 'Token de acesso não fornecido.' });
+  }
 
-        const playlist = await spotifyApi.createPlaylist(name || 'Minhas Curtidas como Playlist', {
-          description: 'Playlist criada a partir das músicas curtidas.',
-          public: false,
-        });
+  if (!playlistName || !trackUris || trackUris.length === 0) {
+      return res.status(400).json({ message: 'Nome da playlist e músicas são obrigatórios.' });
+  }
 
-        const playlistId = playlist.body.id;
+  try {
+      spotifyApi.setAccessToken(token);
 
-        // Adicionar músicas em lotes de 100
-        const batchSize = 100;
-        for (let i = 0; i < trackUris.length; i += batchSize) {
+      // Criar a playlist
+      const playlistData = await spotifyApi.createPlaylist(playlistName, { public: false });
+      const playlistId = playlistData.body.id;
+
+      // Adicionar músicas em lotes de 100
+      const batchSize = 100;
+      for (let i = 0; i < trackUris.length; i += batchSize) {
           const batch = trackUris.slice(i, i + batchSize);
           await spotifyApi.addTracksToPlaylist(playlistId, batch);
-        }
-
-        res.json({ success: true, playlistUrl: playlist.body.external_urls.spotify });
-      } catch (refreshError) {
-        console.error('Erro ao renovar o token de acesso:', refreshError);
-        res.status(500).json({ success: false, message: 'Erro ao renovar o token de acesso', error: refreshError });
       }
-    } else {
-      console.error('Erro ao criar a playlist:', error);
-      res.status(500).json({ success: false, message: 'Erro ao criar a playlist', error });
-    }
+
+      res.json({ message: 'Playlist criada com sucesso!', playlistUrl: playlistData.body.external_urls.spotify });
+  } catch (error) {
+      console.error('Erro ao criar playlist:', error);
+      res.status(500).json({ message: 'Erro ao criar playlist', error });
   }
 });
 
-// Iniciar o servidor
 const PORT = process.env.PORT || 8888;
 app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
