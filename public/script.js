@@ -185,13 +185,18 @@ if (genre) {
 });
 
 document.getElementById('selectAllButton').addEventListener('click', () => {
-    const checkboxes = document.querySelectorAll('.track-checkbox');
-    const allChecked = Array.from(checkboxes).every(checkbox => checkbox.checked);
-  
-    checkboxes.forEach(checkbox => {
-      checkbox.checked = !allChecked; // Alterna entre marcar e desmarcar tudo
+    const tracks = document.querySelectorAll('#trackList li');
+    const allSelected = Array.from(tracks).every(track => track.classList.contains('selected'));
+
+    tracks.forEach(track => {
+        if (allSelected) {
+            track.classList.remove('selected'); // Desmarca tudo se todas já estiverem selecionadas
+        } else {
+            track.classList.add('selected'); // Marca todas se alguma estiver desmarcada
+        }
     });
-  });
+});
+
 
 document.getElementById('loginButton').addEventListener('click', () => {
 window.location.href = '/api/login';
