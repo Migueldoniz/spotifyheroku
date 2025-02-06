@@ -85,12 +85,17 @@ async function loadLikedTracks(token, refreshToken) {
     function updateTrackList(tracks) {
         const trackList = document.getElementById('trackList');
         trackList.innerHTML = tracks.map(track => `
-          <ul>
-            <input type="checkbox" class="track-checkbox" data-uri="${track.uri}">
-            ${track.name} - ${track.artist}
-          </ul>
+            <li data-uri="${track.uri}">${track.name} - ${track.artist}</li>
         `).join('');
-      }
+    
+        // Adiciona o evento de clique para seleção
+        document.querySelectorAll('#trackList li').forEach(item => {
+            item.addEventListener('click', () => {
+                item.classList.toggle('selected');
+            });
+        });
+    }
+    
 
     // Função para carregar músicas filtradas por gênero
 async function loadLikedTracksByGenre(genre) {
@@ -120,15 +125,15 @@ document.getElementById('createPlaylistButton').addEventListener('click', async 
     const playlistInput = document.getElementById('playlistName');
     const status = document.getElementById('status');
     status.textContent = 'Criando playlist...';
+
     if (!playlistInput) {
-        console.error("Erro: Campo de nome da playlist não encontrado.");
         alert("Erro: Campo de nome da playlist não encontrado.");
         return;
     }
 
     const playlistName = playlistInput.value;
-    const selectedTracks = Array.from(document.querySelectorAll('input.track-checkbox:checked'))
-                                .map(checkbox => checkbox.dataset.uri);
+    const selectedTracks = Array.from(document.querySelectorAll('#trackList li.selected'))
+                                .map(li => li.dataset.uri);
 
     if (!playlistName) {
         alert("Por favor, insira um nome para a playlist.");
@@ -145,13 +150,13 @@ document.getElementById('createPlaylistButton').addEventListener('click', async 
         const refreshToken = localStorage.getItem('spotify_refresh_token');
 
         const response = await fetch('/api/create-playlist', {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'X-Refresh-Token': refreshToken,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ playlistName, trackUris: selectedTracks })
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'X-Refresh-Token': refreshToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ playlistName, trackUris: selectedTracks })
         });
 
         const data = await response.json();
@@ -159,15 +164,15 @@ document.getElementById('createPlaylistButton').addEventListener('click', async 
         if (response.ok) {
             status.innerHTML = `Playlist criada com sucesso! <a href="${data.playlistUrl}" target="_blank">Abrir no Spotify</a>`;
         } else {
-        alert(`Erro ao criar playlist: ${data.message}`);
-        console.error("Erro ao criar playlist:", data.error);
+            alert(`Erro ao criar playlist: ${data.message}`);
+            console.error("Erro ao criar playlist:", data.error);
         }
     } catch (error) {
         console.error("Erro ao enviar requisição de criação de playlist:", error);
         alert("Erro ao criar playlist. Veja o console para mais detalhes.");
     }
 });
-  
+
 
     // Evento do botão de filtro
 document.getElementById('filterButton').addEventListener('click', () => {
@@ -190,6 +195,16 @@ document.getElementById('selectAllButton').addEventListener('click', () => {
 
 document.getElementById('loginButton').addEventListener('click', () => {
 window.location.href = '/api/login';
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+    const trackList = document.getElementById("trackList");
+
+    trackList.addEventListener("click", (event) => {
+        if (event.target.tagName === "li") {
+            event.target.classList.toggle("selected");
+        }
+    });
 });
 
 checkAuth();
