@@ -75,6 +75,12 @@ button:disabled {
     transition: all 0.3s;
 }
 
+#trackList img {
+    max-width: 20px;
+    height: auto;
+    margin-right: 10px;
+}
+
 /* Efeito ao passar o mouse */
 #trackList li:hover {
     background: rgba(255, 255, 255, 0.2);
@@ -104,4 +110,9 @@ input, select {
     font-size: 16px;
     font-weight: 500;
     opacity: 0.9;
+}
+
+.lista {
+    display: flex;
+    align-items: center;
 }
