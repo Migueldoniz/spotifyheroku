@@ -15,7 +15,16 @@
     if (token && refreshToken) {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('mainScreen').style.display = 'block';
-        loadLikedTracks(token, refreshToken);
+
+        const status = document.getElementById('status');
+        status.textContent = 'Carregando músicas...'; // Exibe mensagem de carregamento
+
+        loadLikedTracks(token, refreshToken).then(() => {
+            status.textContent = ''; // Limpa a mensagem após o carregamento
+        }).catch(error => {
+            status.textContent = 'Erro ao carregar músicas.';
+            console.error('Erro ao carregar músicas curtidas:', error);
+        });
     } else {
         document.getElementById('loginScreen').style.display = 'block';
     }
